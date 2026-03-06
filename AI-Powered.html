@@ -1,0 +1,880 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KAPAKA AI — Secure Console</title>
+  <style>
+    :root {
+      --bg: #05080b;
+      --hud: #00f5a0;
+      --hud2: #00b7ff;
+      --text: #d9fff1;
+      --muted: #7bd8b8;
+      --danger: #ff4d6d;
+      --card: rgba(6, 18, 18, .72);
+      --glass: rgba(10, 40, 35, .28);
+      --shadow: 0 20px 80px rgba(0, 0, 0, .55);
+      --radius: 18px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans Arabic", "Helvetica Neue", "Apple Color Emoji", "Segoe UI Emoji";
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      background: radial-gradient(1200px 700px at 70% 25%, rgba(0, 245, 160, .12), transparent 55%),
+        radial-gradient(900px 600px at 25% 70%, rgba(0, 183, 255, .10), transparent 55%),
+        var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    /* ===== Background HUD grid ===== */
+    .grid {
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(to right, rgba(0, 245, 160, .07) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 245, 160, .06) 1px, transparent 1px);
+      background-size: 60px 60px;
+      transform: perspective(900px) rotateX(58deg) translateY(12%);
+      transform-origin: center;
+      filter: blur(.2px);
+      opacity: .55;
+      pointer-events: none;
+    }
+
+    /* moving gradient sweep */
+    .sweep {
+      position: fixed;
+      inset: -40%;
+      background: linear-gradient(120deg, transparent 40%, rgba(0, 245, 160, .10), transparent 60%);
+      animation: sweep 6.5s linear infinite;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    @keyframes sweep {
+      0% {
+        transform: translateX(-20%) translateY(-10%) rotate(0deg);
+      }
+
+      100% {
+        transform: translateX(20%) translateY(10%) rotate(0deg);
+      }
+    }
+
+    /* scanlines */
+    .scanlines {
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(to bottom,
+          rgba(255, 255, 255, .03),
+          rgba(255, 255, 255, .03) 1px,
+          transparent 2px,
+          transparent 5px);
+      opacity: .25;
+      pointer-events: none;
+    }
+
+    /* noise overlay */
+    .noise {
+      position: fixed;
+      inset: -20%;
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='.25'/%3E%3C/svg%3E");
+      opacity: .08;
+      animation: noise 1.8s steps(2) infinite;
+      pointer-events: none;
+    }
+
+    @keyframes noise {
+      0% {
+        transform: translate(0, 0);
+      }
+
+      25% {
+        transform: translate(-2%, 1%);
+      }
+
+      50% {
+        transform: translate(1%, -2%);
+      }
+
+      75% {
+        transform: translate(2%, 2%);
+      }
+
+      100% {
+        transform: translate(0, 0);
+      }
+    }
+
+    /* ===== Canvas particles ===== */
+    canvas#particles {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .55;
+    }
+
+    /* ===== Layout ===== */
+    .wrap {
+      position: relative;
+      height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+    }
+
+    .shell {
+      width: min(1040px, 100%);
+      display: grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    @media (max-width: 980px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: linear-gradient(180deg, rgba(0, 245, 160, .06), rgba(0, 183, 255, .04));
+      border: 1px solid rgba(0, 245, 160, .22);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(900px 260px at 40% 0%, rgba(0, 245, 160, .10), transparent 55%);
+      pointer-events: none;
+    }
+
+    .panel::after {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(0, 245, 160, .10);
+      pointer-events: none;
+      mask: linear-gradient(#000, transparent 85%);
+    }
+
+    .left {
+      padding: 18px 18px 16px;
+    }
+
+    .right {
+      padding: 18px;
+      background: linear-gradient(180deg, rgba(5, 12, 12, .55), rgba(5, 12, 12, .35));
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      border-bottom: 1px solid rgba(0, 245, 160, .18);
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 99px;
+      background: var(--hud);
+      box-shadow: 0 0 18px rgba(0, 245, 160, .9);
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        transform: scale(1);
+        opacity: .9;
+      }
+
+      50% {
+        transform: scale(1.35);
+        opacity: .55;
+      }
+    }
+
+    .meta {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: rgba(217, 255, 241, .8);
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .badge {
+      padding: 6px 10px;
+      border: 1px solid rgba(0, 245, 160, .22);
+      border-radius: 999px;
+      background: rgba(0, 245, 160, .06);
+    }
+
+    /* ===== Login Card ===== */
+    .card {
+      margin-top: 12px;
+      background: var(--card);
+      border: 1px solid rgba(0, 245, 160, .18);
+      border-radius: calc(var(--radius) - 4px);
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* glitch header */
+    .title {
+      font-family: var(--mono);
+      margin: 0 0 10px;
+      font-size: 18px;
+      letter-spacing: .06em;
+      position: relative;
+      display: inline-block;
+    }
+
+    .title[data-glitch]::before,
+    .title[data-glitch]::after {
+      content: attr(data-glitch);
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      opacity: .7;
+      clip-path: inset(0 0 0 0);
+    }
+
+    .title[data-glitch]::before {
+      transform: translate(1px, -1px);
+      color: var(--hud2);
+      animation: glitch 2.6s infinite linear alternate-reverse;
+    }
+
+    .title[data-glitch]::after {
+      transform: translate(-1px, 1px);
+      color: var(--danger);
+      animation: glitch 3.1s infinite linear alternate-reverse;
+    }
+
+    @keyframes glitch {
+      0% {
+        clip-path: inset(0 0 90% 0);
+      }
+
+      10% {
+        clip-path: inset(10% 0 70% 0);
+      }
+
+      20% {
+        clip-path: inset(40% 0 40% 0);
+      }
+
+      30% {
+        clip-path: inset(70% 0 20% 0);
+      }
+
+      40% {
+        clip-path: inset(20% 0 60% 0);
+      }
+
+      50% {
+        clip-path: inset(60% 0 25% 0);
+      }
+
+      60% {
+        clip-path: inset(35% 0 45% 0);
+      }
+
+      70% {
+        clip-path: inset(80% 0 10% 0);
+      }
+
+      80% {
+        clip-path: inset(15% 0 65% 0);
+      }
+
+      90% {
+        clip-path: inset(55% 0 30% 0);
+      }
+
+      100% {
+        clip-path: inset(5% 0 85% 0);
+      }
+    }
+
+    .subtitle {
+      margin: 0 0 14px;
+      font-size: 13px;
+      color: rgba(217, 255, 241, .78);
+      line-height: 1.6;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 10px;
+      font-family: var(--mono);
+    }
+
+    label {
+      font-size: 12px;
+      color: rgba(123, 216, 184, .95);
+      letter-spacing: .06em;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(0, 245, 160, .22);
+      background: rgba(0, 0, 0, .28);
+      color: var(--text);
+      outline: none;
+      font-family: var(--mono);
+      font-size: 14px;
+    }
+
+    input:focus {
+      border-color: rgba(0, 245, 160, .55);
+      box-shadow: 0 0 0 3px rgba(0, 245, 160, .12);
+    }
+
+    .rememberToggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .rememberCheckbox {
+      width: auto;
+      accent-color: var(--hud);
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 10px 0 14px;
+      font-size: 12px;
+      color: rgba(217, 255, 241, .75);
+      font-family: var(--mono);
+    }
+
+    .row a {
+      color: rgba(0, 245, 160, .9);
+      text-decoration: none;
+      border-bottom: 1px dashed rgba(0, 245, 160, .35);
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(0, 245, 160, .35);
+      background: linear-gradient(90deg, rgba(0, 245, 160, .20), rgba(0, 183, 255, .15));
+      color: var(--text);
+      font-family: var(--mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent 40%, rgba(255, 255, 255, .18), transparent 60%);
+      transform: translateX(-120%);
+      transition: transform .45s ease;
+    }
+
+    .btn:hover::after {
+      transform: translateX(120%);
+    }
+
+    .foot {
+      margin-top: 12px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 11px;
+      color: rgba(217, 255, 241, .62);
+      font-family: var(--mono);
+    }
+
+    .chip {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 245, 160, .18);
+      background: rgba(0, 245, 160, .05);
+    }
+
+    /* ===== Right side terminal / status ===== */
+    .hudTitle {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: .10em;
+      text-transform: uppercase;
+      color: rgba(0, 245, 160, .9);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .hudVersion {
+      color: rgba(217, 255, 241, .7);
+    }
+
+    .terminal {
+      height: 360px;
+      border-radius: 14px;
+      border: 1px solid rgba(0, 245, 160, .18);
+      background: rgba(0, 0, 0, .28);
+      padding: 12px;
+      overflow: hidden;
+      position: relative;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.6;
+      color: rgba(217, 255, 241, .85);
+    }
+
+    .terminal::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(800px 180px at 50% 0%, rgba(0, 245, 160, .10), transparent 55%);
+      pointer-events: none;
+    }
+
+    .log {
+      opacity: .92;
+      white-space: pre-wrap;
+    }
+
+    .kpi {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .kpi .box {
+      border-radius: 14px;
+      border: 1px solid rgba(0, 245, 160, .18);
+      background: rgba(0, 0, 0, .18);
+      padding: 10px;
+      font-family: var(--mono);
+    }
+
+    .box .num {
+      font-size: 18px;
+      color: rgba(0, 245, 160, .95);
+    }
+
+    .box .lbl {
+      font-size: 11px;
+      color: rgba(217, 255, 241, .65);
+    }
+
+    /* ===== Biometric scan overlay on submit ===== */
+    .scanOverlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      background: rgba(0, 0, 0, .55);
+      -webkit-backdrop-filter: blur(6px);
+      backdrop-filter: blur(6px);
+      z-index: 20;
+    }
+
+    .scanBox {
+      width: min(520px, 92vw);
+      border-radius: 18px;
+      border: 1px solid rgba(0, 245, 160, .25);
+      background: rgba(6, 18, 18, .75);
+      padding: 18px;
+      box-shadow: var(--shadow);
+      font-family: var(--mono);
+    }
+
+    .scanHead {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: rgba(0, 245, 160, .9);
+      font-size: 12px;
+    }
+
+    .progressWrap {
+      border: 1px solid rgba(0, 245, 160, .18);
+      border-radius: 999px;
+      background: rgba(0, 0, 0, .25);
+      overflow: hidden;
+      height: 12px;
+    }
+
+    .bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, rgba(0, 245, 160, .65), rgba(0, 183, 255, .55));
+      transition: width .12s linear;
+    }
+
+    .scanMsg {
+      margin-top: 10px;
+      color: rgba(217, 255, 241, .8);
+      font-size: 12px;
+      min-height: 20px;
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+
+      .grid,
+      .sweep,
+      .noise,
+      .dot {
+        animation: none !important;
+      }
+
+      .title::before,
+      .title::after {
+        animation: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="grid"></div>
+  <div class="sweep"></div>
+  <div class="scanlines"></div>
+  <div class="noise"></div>
+  <canvas id="particles"></canvas>
+
+  <div class="wrap">
+    <div class="shell">
+      <!-- LEFT: Login -->
+      <section class="panel left">
+        <div class="topbar">
+          <div class="brand">
+            <span class="dot"></span>
+            <span>KAPAKA AI / CONTROL</span>
+          </div>
+          <div class="meta">
+            <span class="badge" id="clock">--:--:--</span>
+            <span class="badge">AUTH: L2</span>
+            <span class="badge">NODE: LOCAL</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h1 class="title" data-glitch="KAPAKA AI GATEWAY">KAPAKA AI GATEWAY</h1>
+          <p class="subtitle">
+            Log in to access the KAPAKA AI operations console. All sessions are monitored and audited.
+          </p>
+
+          <form id="loginForm" action="#" method="post" autocomplete="on">
+            <div class="field">
+              <label for="email">AGENT ID / EMAIL</label>
+              <input id="email" name="email" type="email" placeholder="agent@domain.local" required />
+            </div>
+
+            <div class="field">
+              <label for="password">PASSPHRASE</label>
+              <input id="password" name="password" type="password" placeholder="••••••••••" required />
+            </div>
+
+            <div class="row">
+              <label class="rememberToggle">
+                <input type="checkbox" name="remember" class="rememberCheckbox" />
+                Keep session armed
+              </label>
+              <a href="#" onclick="return false;">Recover access</a>
+            </div>
+
+            <button class="btn" type="submit">Authenticate</button>
+
+            <div class="foot">
+              <span class="chip">ENCRYPTION: AES-256*</span>
+              <span class="chip">TRACE: ENABLED</span>
+              <span class="chip">SESSION: EPHEMERAL</span>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- RIGHT: Status / Terminal -->
+      <aside class="panel right">
+        <div class="hudTitle">
+          <span>KAPAKA AI Telemetry</span>
+          <span class="hudVersion">v3.14.0</span>
+        </div>
+
+        <div class="terminal">
+          <div class="log" id="log"></div>
+        </div>
+
+        <div class="kpi">
+          <div class="box">
+            <div class="num" id="k1">0.00</div>
+            <div class="lbl">Signal Integrity</div>
+          </div>
+          <div class="box">
+            <div class="num" id="k2">0</div>
+            <div class="lbl">Active Sessions</div>
+          </div>
+          <div class="box">
+            <div class="num" id="k3">OK</div>
+            <div class="lbl">Firewall Status</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Scan Overlay -->
+  <div class="scanOverlay" id="scanOverlay" aria-hidden="true">
+    <div class="scanBox">
+      <div class="scanHead">
+        <span>Biometric Verification</span>
+        <span id="scanPct">0%</span>
+      </div>
+      <div class="progressWrap">
+        <div class="bar" id="bar"></div>
+      </div>
+      <div class="scanMsg" id="scanMsg">Initializing…</div>
+    </div>
+  </div>
+
+  <script>
+    // ===== Clock =====
+    const clockEl = document.getElementById('clock');
+    function tick() {
+      const d = new Date();
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      clockEl.textContent = `${hh}:${mm}:${ss}`;
+    }
+    setInterval(tick, 250); tick();
+
+    // ===== Terminal logs (fake but cool) =====
+    const logEl = document.getElementById('log');
+    const lines = [
+      "[BOOT] KAPAKA AI node startup...",
+      "[NET ] Establishing secure link: kapaka.local",
+      "[AUTH] Loading policy: KAPAKA_ZERO_TRUST_L2",
+      "[IDS ] KAPAKA sensors online. Baseline calibrated.",
+      "[KEY ] Rotating session keys...",
+      "[SYS ] Integrity check: PASSED",
+      "[AI  ] Inference services ready...",
+      "[OK  ] Awaiting operator credentials..."
+    ];
+    let idx = 0;
+    function pushLine(txt) {
+      logEl.textContent += txt + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    function typeLine(text, speed = 14) {
+      return new Promise(resolve => {
+        let i = 0;
+        const t = setInterval(() => {
+          const chunk = text.slice(0, i++);
+          const current = logEl.textContent.split("\n");
+          current[current.length - 1] = chunk;
+          logEl.textContent = current.join("\n");
+          if (i > text.length) {
+            clearInterval(t);
+            logEl.textContent += "\n";
+            resolve();
+          }
+        }, speed);
+      });
+    }
+    (async () => {
+      logEl.textContent = "";
+      for (const l of lines) {
+        pushLine("");
+        await typeLine(l, 10 + Math.random() * 10);
+      }
+      setInterval(() => {
+        const stamp = new Date().toISOString().replace("T", " ").slice(0, 19);
+        const r = Math.random();
+        const msg =
+          r < .25 ? `[PING] ${stamp} :: kapaka-core heartbeat ok` :
+            r < .5 ? `[IDS ] ${stamp} :: anomaly scan: clean` :
+              r < .75 ? `[AI  ] ${stamp} :: model health: nominal` :
+                `[OPS ] ${stamp} :: route stable (kapaka-edge)`;
+        pushLine(msg);
+        if (logEl.textContent.split("\n").length > 120) {
+          logEl.textContent = logEl.textContent.split("\n").slice(-90).join("\n");
+        }
+      }, 1300);
+    })();
+
+    // ===== KPI flicker =====
+    const k1 = document.getElementById('k1');
+    const k2 = document.getElementById('k2');
+    const k3 = document.getElementById('k3');
+    setInterval(() => {
+      k1.textContent = (0.93 + Math.random() * 0.07).toFixed(2);
+      k2.textContent = String(12 + Math.floor(Math.random() * 6));
+      k3.textContent = Math.random() > 0.03 ? "OK" : "WARN";
+      k3.style.color = (k3.textContent === "OK") ? "rgba(0,245,160,.95)" : "rgba(255,77,109,.95)";
+    }, 900);
+
+    // ===== Particles =====
+    const c = document.getElementById('particles');
+    const ctx = c.getContext('2d');
+    let W, H, particles;
+    function resize() {
+      W = c.width = window.innerWidth * devicePixelRatio;
+      H = c.height = window.innerHeight * devicePixelRatio;
+      particles = Array.from({ length: Math.min(140, Math.floor((W * H) / 500000)) }, () => ({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: (0.8 + Math.random() * 1.8) * devicePixelRatio,
+        vx: (-0.18 + Math.random() * 0.36) * devicePixelRatio,
+        vy: (-0.10 + Math.random() * 0.20) * devicePixelRatio,
+        a: 0.15 + Math.random() * 0.45
+      }));
+    }
+    window.addEventListener('resize', resize); resize();
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      // dots
+      for (const p of particles) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < -50) p.x = W + 50;
+        if (p.x > W + 50) p.x = -50;
+        if (p.y < -50) p.y = H + 50;
+        if (p.y > H + 50) p.y = -50;
+
+        ctx.globalAlpha = p.a;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(0,245,160,1)";
+        ctx.fill();
+      }
+      // links
+      ctx.globalAlpha = 0.12;
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const a = particles[i], b = particles[j];
+          const dx = a.x - b.x, dy = a.y - b.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < (140 * devicePixelRatio) * (140 * devicePixelRatio)) {
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.strokeStyle = "rgba(0,183,255,1)";
+            ctx.lineWidth = 1 * devicePixelRatio;
+            ctx.stroke();
+          }
+        }
+      }
+      requestAnimationFrame(draw);
+    }
+    requestAnimationFrame(draw);
+
+    // ===== Fake scan overlay on submit =====
+    const form = document.getElementById('loginForm');
+    const overlay = document.getElementById('scanOverlay');
+    const bar = document.getElementById('bar');
+    const scanPct = document.getElementById('scanPct');
+    const scanMsg = document.getElementById('scanMsg');
+
+    const msgs = [
+      "Calibrating sensors…",
+      "Validating credential structure…",
+      "Decrypting handshake…",
+      "Checking policy compliance…",
+      "Finalizing session…"
+    ];
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+
+      overlay.style.display = "grid";
+      overlay.setAttribute("aria-hidden", "false");
+      let p = 0;
+      let mi = 0;
+      scanMsg.textContent = msgs[0];
+      const timer = setInterval(() => {
+        p += 3 + Math.random() * 7;
+        if (p > 100) p = 100;
+        bar.style.width = p.toFixed(0) + "%";
+        scanPct.textContent = p.toFixed(0) + "%";
+
+        if (p > (mi + 1) * 20 && mi < msgs.length - 1) {
+          mi++;
+          scanMsg.textContent = msgs[mi];
+        }
+
+        if (p >= 100) {
+          clearInterval(timer);
+          scanMsg.textContent = "Access granted. Redirecting…";
+          setTimeout(() => {
+            overlay.style.display = "none";
+            overlay.setAttribute("aria-hidden", "true");
+
+            // Here, instead of this line, create a real redirect to your system path:
+            alert("Logged in (demo). Wire this to your system route.");
+
+          }, 550);
+        }
+      }, 70);
+    });
+  </script>
+</body>
+
+</html>
